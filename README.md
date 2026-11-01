@@ -24,7 +24,7 @@ Le script automatise la récupération et l'archivage des titres suivants :
 | :--- | :--- |
 | Le Courrier | ✅ Implémenté |
 | 24 heures | 🧪 Implémenté, à valider avec une vraie session (voir « Connexion à 24 heures ») |
-| Le Temps | ⏳ À faire (interception réseau) |
+| Le Temps | 🧪 Implémenté (interception réseau), à valider avec une vraie session et la commande `probe` |
 | Le Monde | ⏳ À faire (interception réseau) |
 
 ## Structure du projet
@@ -36,10 +36,12 @@ NewsArchiver/
 ├── .env.example                 # Modèle de configuration (copier en .env)
 └── newsarchiver/
     ├── config.py                # Lecture de la configuration (.env)
+    ├── dates.py                 # Dates en français, dernière édition attendue
     ├── base.py                  # Classe abstraite BaseDownloader (idempotence, session)
     └── sources/
         ├── le_courrier.py       # Téléchargeur de Le Courrier
-        └── vingt_quatre_heures.py  # Téléchargeur de 24 heures
+        ├── vingt_quatre_heures.py  # Téléchargeur de 24 heures
+        └── le_temps.py          # Téléchargeur de Le Temps (interception réseau)
 ```
 
 ## Installation
@@ -65,7 +67,8 @@ Les paramètres sont lus dans le fichier `.env` (exclu de Git) :
 ```bash
 python run.py              # toutes les sources
 python run.py le_courrier  # une seule source
-python run.py login 24heures  # connexion manuelle, une seule fois
+python run.py login 24heures  # connexion manuelle, une seule fois (idem : login letemps)
+python run.py probe letemps   # diagnostic : trafic réseau du lecteur (voir .browser_state/)
 ```
 
 Pour un lancement automatique, créer une tâche planifiée du système (par exemple chaque jeudi pour Le Courrier).
@@ -80,6 +83,10 @@ python run.py login 24heures
 
 Un navigateur visible s'ouvre. Après connexion, appuyer sur Entrée dans le terminal : la session (cookies) est enregistrée dans `.browser_state/24heures.json`. Les exécutions suivantes réutilisent cette session en mode headless. Quand elle expire, le script affiche « session expirée » : relancer la commande ci-dessus.
 
+## Le Temps
+
+Le site ne propose pas de bouton de téléchargement : la liste publique `letemps.ch/pdf?publication=TPS` donne la date de la dernière édition et le lien vers le lecteur ePaper (accessible uniquement connecté). Le script ouvre ce lecteur avec la session enregistrée (`python run.py login letemps`, connexion manuelle) et intercepte les réponses réseau pour capturer un PDF complet (au moins 2 Mo). Si rien n'est intercepté, `python run.py probe letemps` enregistre le trafic du lecteur dans `.browser_state/probe_letemps.txt` pour identifier d'où vient le PDF.
+
 ## Archivage
 
 Les PDF sont rangés par journal puis par année :
@@ -87,6 +94,7 @@ Les PDF sont rangés par journal puis par année :
 ```text
 ARCHIVE_PATH/Le Courrier/2026/LeCourrier_2026_41_10-29.pdf
 ARCHIVE_PATH/24 heures/2026/24heures_2026-10-31.pdf
+ARCHIVE_PATH/Le Temps/2026/LeTemps_2026-10-31.pdf
 ```
 
 Pour Le Courrier, le schéma est `LeCourrier_AAAA_NN_MM-JJ.pdf` : `NN` est le numéro de l'année (repart à 1 en janvier) et `MM-JJ` la date de parution.

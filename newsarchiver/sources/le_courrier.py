@@ -6,12 +6,8 @@ from playwright.sync_api import Page
 from pypdf import PdfReader
 
 from newsarchiver.base import BaseDownloader
+from newsarchiver.dates import MOIS
 
-_MOIS = {
-    "janvier": 1, "février": 2, "mars": 3, "avril": 4, "mai": 5, "juin": 6,
-    "juillet": 7, "août": 8, "septembre": 9, "octobre": 10, "novembre": 11,
-    "décembre": 12,
-}
 # Ligne d'en-tête de la une : « … | N° 41 | JEUDI 29 OCTOBRE 2026 | … ».
 # Ancrée sur le « | » pour ne pas confondre avec « N° 9 – 2026 » (communes).
 _ISSUE_RE = re.compile(
@@ -55,8 +51,8 @@ class LeCourrierDownloader(BaseDownloader):
     def _read_issue(pdf: bytes) -> tuple[int, date] | None:
         text = PdfReader(BytesIO(pdf)).pages[0].extract_text()
         for number, day, month, year in _ISSUE_RE.findall(text):
-            if month.lower() in _MOIS:
-                return int(number), date(int(year), _MOIS[month.lower()], int(day))
+            if month.lower() in MOIS:
+                return int(number), date(int(year), MOIS[month.lower()], int(day))
         return None
 
     def _quarantine(self, pdf: bytes) -> Path | None:

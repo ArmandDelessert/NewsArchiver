@@ -1,11 +1,11 @@
 import re
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from playwright.sync_api import Page, Playwright, TimeoutError as PlaywrightTimeout
 
 from newsarchiver.base import BaseDownloader
+from newsarchiver.dates import last_issue_date_without_sunday
 
-_DIMANCHE = 6
 # Date de l'édition affichée, dans l'URL : /read/124/124/2026-10-31/1
 _URL_DATE_RE = re.compile(r"/read/\d+/\d+/(\d{4})-(\d{2})-(\d{2})/")
 
@@ -28,14 +28,8 @@ class VingtQuatreHeuresDownloader(BaseDownloader):
         folder = self.config.archive_path / "24 heures" / str(publication_date.year)
         return folder / f"24heures_{publication_date.isoformat()}.pdf"
 
-    @staticmethod
-    def _expected_date() -> date:
-        # Pas de parution le dimanche : la dernière édition est celle du samedi.
-        today = date.today()
-        return today - timedelta(days=1) if today.weekday() == _DIMANCHE else today
-
     def already_archived(self) -> bool:
-        return self._path_for(self._expected_date()).exists()
+        return self._path_for(last_issue_date_without_sunday()).exists()
 
     def login(self, playwright: Playwright) -> None:
         # La connexion (SSO Tamedia + Cloudflare Turnstile) reste manuelle.

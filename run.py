@@ -4,17 +4,20 @@ Usage:
     python run.py                  # exécute toutes les sources actives
     python run.py le_courrier      # exécute une seule source
     python run.py login 24heures   # connexion manuelle (une fois), enregistre la session
+    python run.py probe letemps    # diagnostic : enregistre le trafic réseau du lecteur
 """
 import sys
 from playwright.sync_api import sync_playwright
 
 from newsarchiver.config import load_config
 from newsarchiver.sources.le_courrier import LeCourrierDownloader
+from newsarchiver.sources.le_temps import LeTempsDownloader
 from newsarchiver.sources.vingt_quatre_heures import VingtQuatreHeuresDownloader
 
 SOURCES = {
     "le_courrier": LeCourrierDownloader,
     "24heures": VingtQuatreHeuresDownloader,
+    "letemps": LeTempsDownloader,
 }
 
 
@@ -22,13 +25,18 @@ def main() -> None:
     config = load_config()
     args = sys.argv[1:]
 
-    if args[:1] == ["login"]:
+    if args[:1] in (["login"], ["probe"]):
+        command = args[0]
         key = args[1] if len(args) > 1 else None
-        if key not in SOURCES or SOURCES[key].session_name is None:
-            sys.exit(f"Usage : python run.py login <source avec session>. "
-                     f"Sources : {[k for k, c in SOURCES.items() if c.session_name]}")
-        with sync_playwright() as p:
-            SOURCES[key](config).login(p)
+        cls = SOURCES.get(key)
+        if cls is None or cls.session_name is None or not hasattr(cls, command):
+            sys.exit(f"Usage : python run.py {command} <source>. Sources avec "
+                     f"{command} : {[k for k, c in SOURCES.items() if c.session_name and hasattr(c, command)]}")
+        try:
+            with sync_playwright() as p:
+                getattr(cls(config), command)(p)
+        except RuntimeError as e:
+            sys.exit(f"ERREUR : {e}")
         return
 
     requested = args[0] if args else "all"
