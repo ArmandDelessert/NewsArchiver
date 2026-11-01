@@ -69,11 +69,14 @@ Pour un lancement automatique, créer une tâche planifiée du système (par exe
 
 ## Archivage
 
-Les PDF sont rangés par journal puis par année, et nommés avec la **date de parution** :
+Les PDF sont rangés par journal puis par année :
 
 ```text
-ARCHIVE_PATH/Le Courrier/2026/LeCourrier_2026-10-29.pdf
+ARCHIVE_PATH/Le Courrier/2026/LeCourrier_2026_41_10-29.pdf
 ```
 
-- **Idempotence :** si le fichier attendu existe déjà, le script ne lance pas le navigateur.
-- **Le Courrier :** le lien du dernier numéro est lu sur la page d'accueil. La date de parution est lue sur la première page du PDF (ligne « JEUDI 29 OCTOBRE 2026 »). Si elle est illisible, le script utilise la date du dernier jeudi et affiche un avertissement.
+Pour Le Courrier, le schéma est `LeCourrier_AAAA_NN_MM-JJ.pdf` : `NN` est le numéro de l'année (repart à 1 en janvier) et `MM-JJ` la date de parution.
+
+- **Idempotence :** avant de lancer le navigateur, le script vérifie si le numéro du dernier jeudi est déjà archivé. Après téléchargement, il vérifie à nouveau avec le vrai numéro. Un fichier existant n'est jamais écrasé.
+- **Le Courrier :** le lien du dernier numéro est lu sur la page d'accueil. Le numéro et la date de parution sont lus sur la première page du PDF (ligne « N° 41 | JEUDI 29 OCTOBRE 2026 »). Le numéro depuis la création du journal (« N° 35744 ») est ignoré, car il n'est pas fiable.
+- **Numéro illisible :** le PDF est rangé dans `ARCHIVE_PATH/Le Courrier/_a-verifier/` et un avertissement est affiché. Il faut le renommer à la main.

@@ -12,12 +12,16 @@ _MOIS = {
     "juillet": 7, "août": 8, "septembre": 9, "octobre": 10, "novembre": 11,
     "décembre": 12,
 }
-_DATE_RE = re.compile(
+# Ligne d'en-tête de la une : « … | N° 41 | JEUDI 29 OCTOBRE 2026 | … ».
+# Ancrée sur le « | » pour ne pas confondre avec « N° 9 – 2026 » (communes).
+_ISSUE_RE = re.compile(
+    r"N°\s*(\d{1,3})\s*\|\s*"
     r"(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+"
-    r"(\d{1,2})(?:er)?\s+([a-zéûè]+)\s+(\d{4})",
+    r"(\d{1,2})\s*(?:er)?\s+([a-zéûè]+)\s+(\d{4})",
     re.IGNORECASE,
 )
 _JEUDI = 3
+_QUARANTAINE = "_a-verifier"
 
 
 class LeCourrierDownloader(BaseDownloader):
@@ -26,25 +30,52 @@ class LeCourrierDownloader(BaseDownloader):
     _SELECTOR = "#block-54 > figure > figure > a"
     _BASE_URL = "https://www.le-courrier.ch/"
 
-    def _path_for(self, publication_date: date) -> Path:
-        folder = self.config.archive_path / "Le Courrier" / str(publication_date.year)
-        return folder / f"LeCourrier_{publication_date.isoformat()}.pdf"
+    @property
+    def _root(self) -> Path:
+        return self.config.archive_path / "Le Courrier"
+
+    def _path_for(self, number: int, publication_date: date) -> Path:
+        year = publication_date.year
+        name = f"LeCourrier_{year}_{number:02d}_{publication_date:%m-%d}.pdf"
+        return self._root / str(year) / name
 
     @staticmethod
     def _last_thursday() -> date:
         today = date.today()
         return today - timedelta(days=(today.weekday() - _JEUDI) % 7)
 
-    def get_target_path(self) -> Path:
-        return self._path_for(self._last_thursday())
+    def already_archived(self) -> bool:
+        # Le numéro n'est connu qu'après téléchargement : on cherche par date.
+        thursday = self._last_thursday()
+        folder = self._root / str(thursday.year)
+        pattern = f"LeCourrier_{thursday.year}_*_{thursday:%m-%d}.pdf"
+        return any(folder.glob(pattern))
 
     @staticmethod
-    def _read_publication_date(pdf: bytes) -> date | None:
+    def _read_issue(pdf: bytes) -> tuple[int, date] | None:
         text = PdfReader(BytesIO(pdf)).pages[0].extract_text()
-        for jour, mois, annee in _DATE_RE.findall(text):
-            if mois.lower() in _MOIS:
-                return date(int(annee), _MOIS[mois.lower()], int(jour))
+        for number, day, month, year in _ISSUE_RE.findall(text):
+            if month.lower() in _MOIS:
+                return int(number), date(int(year), _MOIS[month.lower()], int(day))
         return None
+
+    def _quarantine(self, pdf: bytes) -> Path | None:
+        folder = self._root / _QUARANTAINE
+        folder.mkdir(parents=True, exist_ok=True)
+        if any(f.read_bytes() == pdf for f in folder.glob("*.pdf")):
+            print(f"[{self.source_name}] Numéro non identifiable, déjà dans {_QUARANTAINE}.")
+            return None
+        dest = folder / f"LeCourrier_{date.today().isoformat()}.pdf"
+        n = 2
+        while dest.exists():
+            dest = folder / f"LeCourrier_{date.today().isoformat()}_{n}.pdf"
+            n += 1
+        dest.write_bytes(pdf)
+        print(
+            f"[{self.source_name}] ATTENTION : numéro et date illisibles dans le PDF. "
+            f"Fichier à renommer à la main : {dest}"
+        )
+        return dest
 
     def download(self, page: Page) -> Path | None:
         page.goto(self._BASE_URL, wait_until="domcontentloaded", timeout=30_000)
@@ -63,15 +94,11 @@ class LeCourrierDownloader(BaseDownloader):
             )
         pdf = response.body()
 
-        publication_date = self._read_publication_date(pdf)
-        if publication_date is None:
-            publication_date = self._last_thursday()
-            print(
-                f"[{self.source_name}] Date de parution illisible dans le PDF, "
-                f"repli sur le dernier jeudi ({publication_date})."
-            )
+        issue = self._read_issue(pdf)
+        if issue is None:
+            return self._quarantine(pdf)
 
-        dest = self._path_for(publication_date)
+        dest = self._path_for(*issue)
         if dest.exists():
             print(
                 f"[{self.source_name}] Le dernier numéro ({dest.name}) est déjà "
