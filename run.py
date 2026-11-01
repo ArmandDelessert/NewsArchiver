@@ -1,43 +1,54 @@
 #!/usr/bin/env python3
 """
 Usage:
-    python run.py                # exécute toutes les sources actives
-    python run.py le_courrier    # exécute uniquement Le Courrier
+    python run.py                  # exécute toutes les sources actives
+    python run.py le_courrier      # exécute une seule source
+    python run.py login 24heures   # connexion manuelle (une fois), enregistre la session
 """
 import sys
 from playwright.sync_api import sync_playwright
 
 from newsarchiver.config import load_config
 from newsarchiver.sources.le_courrier import LeCourrierDownloader
+from newsarchiver.sources.vingt_quatre_heures import VingtQuatreHeuresDownloader
 
 SOURCES = {
     "le_courrier": LeCourrierDownloader,
+    "24heures": VingtQuatreHeuresDownloader,
 }
 
 
 def main() -> None:
     config = load_config()
-    requested = sys.argv[1] if len(sys.argv) > 1 else "all"
+    args = sys.argv[1:]
 
+    if args[:1] == ["login"]:
+        key = args[1] if len(args) > 1 else None
+        if key not in SOURCES or SOURCES[key].session_name is None:
+            sys.exit(f"Usage : python run.py login <source avec session>. "
+                     f"Sources : {[k for k, c in SOURCES.items() if c.session_name]}")
+        with sync_playwright() as p:
+            SOURCES[key](config).login(p)
+        return
+
+    requested = args[0] if args else "all"
     if requested == "all":
-        to_run = list(SOURCES.values())
+        keys = list(SOURCES)
     elif requested in SOURCES:
-        to_run = [SOURCES[requested]]
+        keys = [requested]
     else:
-        print(f"Source inconnue : {requested!r}. Sources disponibles : {list(SOURCES)}")
-        sys.exit(1)
+        sys.exit(f"Source inconnue : {requested!r}. Sources disponibles : {list(SOURCES)}")
 
-    headless = not config.debug
-
+    failed = False
     with sync_playwright() as p:
-        for DownloaderClass in to_run:
-            browser = p.chromium.launch(headless=headless)
+        for key in keys:
+            downloader = SOURCES[key](config)
             try:
-                page = browser.new_page()
-                downloader = DownloaderClass(config)
-                downloader.run(page)
-            finally:
-                browser.close()
+                downloader.run(p)
+            except Exception as e:  # une source en échec ne bloque pas les autres
+                failed = True
+                print(f"[{downloader.source_name}] ERREUR : {e}", file=sys.stderr)
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":
