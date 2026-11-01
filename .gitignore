@@ -1,0 +1,21 @@
+# Secrets — ne jamais committer
+.env
+
+# État du navigateur (contient des cookies d'authentification)
+.browser_state/
+
+# PDFs archivés
+*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
