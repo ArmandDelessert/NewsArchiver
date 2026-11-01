@@ -24,7 +24,7 @@ Le script automatise la récupération et l'archivage des titres suivants :
 | :--- | :--- |
 | Le Courrier | ✅ Implémenté |
 | 24 heures | 🧪 Implémenté, à valider avec une vraie session (voir « Connexion à 24 heures ») |
-| Le Temps | 🧪 Implémenté (interception réseau), à valider avec une vraie session et la commande `probe` |
+| Le Temps | ✅ Implémenté (testé, téléchargement direct) |
 | Le Monde | ⏳ À faire (interception réseau) |
 
 ## Structure du projet
@@ -41,7 +41,7 @@ NewsArchiver/
     └── sources/
         ├── le_courrier.py       # Téléchargeur de Le Courrier
         ├── vingt_quatre_heures.py  # Téléchargeur de 24 heures
-        └── le_temps.py          # Téléchargeur de Le Temps (interception réseau)
+        └── le_temps.py          # Téléchargeur de Le Temps
 ```
 
 ## Installation
@@ -68,7 +68,6 @@ Les paramètres sont lus dans le fichier `.env` (exclu de Git) :
 python run.py              # toutes les sources
 python run.py le_courrier  # une seule source
 python run.py login 24heures  # connexion manuelle, une seule fois (idem : login letemps)
-python run.py probe letemps   # diagnostic : trafic réseau du lecteur (voir .browser_state/)
 ```
 
 Pour un lancement automatique, créer une tâche planifiée du système (par exemple chaque jeudi pour Le Courrier).
@@ -85,7 +84,7 @@ Un navigateur visible s'ouvre. Après connexion, appuyer sur Entrée dans le ter
 
 ## Le Temps
 
-Le site ne propose pas de bouton de téléchargement : la liste publique `letemps.ch/pdf?publication=TPS` donne la date de la dernière édition et le lien vers le lecteur ePaper (accessible uniquement connecté). Le script ouvre ce lecteur avec la session enregistrée (`python run.py login letemps`, connexion manuelle) et intercepte les réponses réseau pour capturer un PDF complet (au moins 2 Mo). Si rien n'est intercepté, `python run.py probe letemps` enregistre le trafic du lecteur dans `.browser_state/probe_letemps.txt` pour identifier d'où vient le PDF.
+Connecté, la liste `letemps.ch/pdf?publication=TPS` propose un lien **PDF** direct pour chaque édition, y compris celle du lendemain, publiée la veille au soir. Le script lit la date de parution sur la carte de la dernière édition et télécharge ce PDF avec la session enregistrée (`python run.py login letemps`, connexion manuelle). Sans session valide, la liste n'affiche que des liens ePaper : le script signale alors « session expirée ».
 
 ## Archivage
 
