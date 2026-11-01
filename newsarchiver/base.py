@@ -16,13 +16,14 @@ class BaseDownloader(ABC):
     def get_target_path(self) -> Path: ...
 
     @abstractmethod
-    def download(self, page: Page) -> Path: ...
+    def download(self, page: Page) -> Path | None:
+        """Télécharge et enregistre le fichier ; retourne None si rien de nouveau."""
 
     def run(self, page: Page) -> None:
         target = self.get_target_path()
         if target.exists():
             print(f"[{self.source_name}] Déjà téléchargé : {target.name} — ignoré.")
             return
-        target.parent.mkdir(parents=True, exist_ok=True)
         saved = self.download(page)
-        print(f"[{self.source_name}] Enregistré : {saved}")
+        if saved:
+            print(f"[{self.source_name}] Enregistré : {saved}")
