@@ -25,7 +25,7 @@ Le script automatise la récupération et l'archivage des titres suivants :
 | Le Courrier | ✅ Implémenté |
 | 24 heures | 🧪 Implémenté, à valider avec une vraie session (voir « Connexion à 24 heures ») |
 | Le Temps | ✅ Implémenté (testé, téléchargement direct) |
-| Le Monde | 🚧 Connexion et diagnostic (`probe`) prêts, téléchargement à écrire |
+| Le Monde | ✅ Implémenté (testé, PDF assemblé page par page) |
 
 ## Structure du projet
 
@@ -42,7 +42,7 @@ NewsArchiver/
         ├── le_courrier.py       # Téléchargeur de Le Courrier
         ├── vingt_quatre_heures.py  # Téléchargeur de 24 heures
         ├── le_temps.py          # Téléchargeur de Le Temps
-        └── le_monde.py          # Le Monde (en développement : login + probe)
+        └── le_monde.py          # Téléchargeur de Le Monde
 ```
 
 ## Installation
@@ -87,16 +87,9 @@ Un navigateur visible s'ouvre. Après connexion, appuyer sur Entrée dans le ter
 
 Connecté, la liste `letemps.ch/pdf?publication=TPS` propose un lien **PDF** direct pour chaque édition, y compris celle du lendemain, publiée la veille au soir. Le script lit la date de parution sur la carte de la dernière édition et télécharge ce PDF avec la session enregistrée (`python run.py login letemps`, connexion manuelle). Sans session valide, la liste n'affiche que des liens ePaper : le script signale alors « session expirée ».
 
-## Le Monde (en cours)
+## Le Monde
 
-Le lecteur `journal.lemonde.fr` est une application Twipe. « Lire » redirige vers la connexion `secure.lemonde.fr`. La source n'est pas encore active (exclue de `python run.py`). Étapes :
-
-```bash
-python run.py login lemonde   # connexion manuelle, une fois
-python run.py probe lemonde   # ouvre le lecteur et enregistre boutons et trafic réseau
-```
-
-Le diagnostic est écrit dans `.browser_state/probe_lemonde.txt` (valeurs des paramètres d'URL masquées) avec deux captures d'écran. Il sert à décider entre un bouton de téléchargement et une interception réseau.
+Le lecteur `journal.lemonde.fr` (Twipe) n'a pas de bouton « tout télécharger » : « Imprimer » ne propose que la page courante. Connecté (`python run.py login lemonde`, connexion manuelle), le lecteur reçoit l'index des pages et un modèle d'URL signées pour le PDF de chaque page. Le script récupère ces données (interception des réponses réseau du lecteur), télécharge les PDF de toutes les pages (Le Monde, mais aussi suppléments et cahiers de l'édition, par exemple Époque) et les assemble en un seul fichier avec `pypdf`. La date vient du nom de l'édition (« Le Monde - 02-11-2026 »). L'édition du lendemain est disponible dès la veille au soir.
 
 ## Archivage
 
@@ -106,6 +99,7 @@ Les PDF sont rangés par journal puis par année :
 ARCHIVE_PATH/Le Courrier/2026/LeCourrier_2026_41_10-29.pdf
 ARCHIVE_PATH/24 heures/2026/24heures_2026-10-31.pdf
 ARCHIVE_PATH/Le Temps/2026/LeTemps_2026-10-31.pdf
+ARCHIVE_PATH/Le Monde/2026/LeMonde_2026-11-02.pdf
 ```
 
 Pour Le Courrier, le schéma est `LeCourrier_AAAA_NN_MM-JJ.pdf` : `NN` est le numéro de l'année (repart à 1 en janvier) et `MM-JJ` la date de parution.

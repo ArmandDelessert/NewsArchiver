@@ -4,7 +4,6 @@ Usage:
     python run.py                  # exécute toutes les sources actives
     python run.py le_courrier      # exécute une seule source
     python run.py login 24heures   # connexion manuelle (une fois), enregistre la session
-    python run.py probe lemonde    # diagnostic (source en développement)
 """
 import sys
 from playwright.sync_api import sync_playwright
@@ -27,18 +26,14 @@ def main() -> None:
     config = load_config()
     args = sys.argv[1:]
 
-    if args[:1] in (["login"], ["probe"]):
-        command = args[0]
+    if args[:1] == ["login"]:
         key = args[1] if len(args) > 1 else None
         cls = SOURCES.get(key)
-        if cls is None or cls.session_name is None or not hasattr(cls, command):
-            sys.exit(f"Usage : python run.py {command} <source>. Sources avec "
-                     f"{command} : {[k for k, c in SOURCES.items() if c.session_name and hasattr(c, command)]}")
-        try:
-            with sync_playwright() as p:
-                getattr(cls(config), command)(p)
-        except RuntimeError as e:
-            sys.exit(f"ERREUR : {e}")
+        if cls is None or cls.session_name is None:
+            sys.exit(f"Usage : python run.py login <source>. "
+                     f"Sources avec connexion : {[k for k, c in SOURCES.items() if c.session_name]}")
+        with sync_playwright() as p:
+            cls(config).login(p)
         return
 
     requested = args[0] if args else "all"

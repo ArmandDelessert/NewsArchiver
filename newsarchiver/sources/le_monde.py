@@ -1,25 +1,25 @@
+import re
+import time
 from datetime import date
+from io import BytesIO
 from pathlib import Path
-from urllib.parse import parse_qsl, urlsplit
 from playwright.sync_api import Page, Playwright
+from pypdf import PdfReader, PdfWriter
 
 from newsarchiver.base import BaseDownloader
 from newsarchiver.dates import last_issue_date_without_sunday
 
-
-def _redact(url: str) -> str:
-    """Garde l'URL et les noms de paramètres, masque les valeurs (jetons possibles)."""
-    parts = urlsplit(url)
-    query = "&".join(f"{name}=…" for name, _ in parse_qsl(parts.query))
-    return f"{parts.scheme}://{parts.netloc}{parts.path}" + (f"?{query}" if query else "")
+_PACKAGE_DATE_RE = re.compile(r"(\d{2})-(\d{2})-(\d{4})")
+_WAIT_SECONDS = 60
 
 
 class LeMondeDownloader(BaseDownloader):
+    """Le lecteur (Twipe) n'a pas de bouton « tout télécharger » : on récupère les PDF
+    de chaque page avec les URL signées que le serveur fournit à la session
+    connectée, puis on les assemble."""
 
     source_name = "Le Monde"
     session_name = "lemonde"
-    # Téléchargement pas encore écrit : exclu de « python run.py » sans argument.
-    ready = False
     _READER_URL = "https://journal.lemonde.fr/"
 
     def _path_for(self, publication_date: date) -> Path:
@@ -47,61 +47,81 @@ class LeMondeDownloader(BaseDownloader):
             browser.close()
         print(f"[{self.source_name}] Session enregistrée : {self.session_path}")
 
+    def _open_latest_edition(self, page: Page) -> dict:
+        """Ouvre la dernière édition et retourne les données que le lecteur reçoit."""
+        responses = []
+        page.on("response", lambda response: responses.append(response))
+        page.goto(self._READER_URL, wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(3_000)
+        try:  # bandeau cookies : refuser
+            page.get_by_text("Continuer sans accepter").first.click(timeout=3_000)
+        except Exception:
+            pass
+        page.locator(".main-button", has_text="Lire").first.click(timeout=15_000)
+
+        wanted = {
+            "info": "GetContentPackageInfo",
+            "credentials": "GetDownloadCredentials",
+            "pages": "GetPublicationPages-",
+        }
+        found: dict = {}
+        deadline = time.monotonic() + _WAIT_SECONDS
+        while len(found) < len(wanted) and time.monotonic() < deadline:
+            if "secure.lemonde.fr" in page.url:
+                raise RuntimeError(
+                    f"{self.source_name} : session expirée. "
+                    f"Relancer : python run.py login {self.session_name}"
+                )
+            for response in list(responses):
+                for key, fragment in wanted.items():
+                    if key not in found and fragment in response.url and response.ok:
+                        found[key] = response.json()
+            page.wait_for_timeout(500)
+        missing = set(wanted) - set(found)
+        if missing:
+            raise RuntimeError(f"{self.source_name} : données du lecteur manquantes : {sorted(missing)}")
+        return found
+
+    def _publication_date(self, info: dict) -> date:
+        # « Le Monde - 02-11-2026 »
+        match = _PACKAGE_DATE_RE.search(info.get("ContentPackageName", ""))
+        if not match:
+            raise RuntimeError(f"{self.source_name} : date introuvable dans {info.get('ContentPackageName')!r}")
+        day, month, year = map(int, match.groups())
+        return date(year, month, day)
+
     def download(self, page: Page) -> Path | None:
-        raise RuntimeError(
-            f"{self.source_name} : téléchargement pas encore implémenté. "
-            "Lancer : python run.py probe lemonde"
-        )
-
-    def probe(self, playwright: Playwright) -> None:
-        """Diagnostic : ouvre le lecteur, clique sur « Lire » et journalise la page et le réseau."""
-        if not self.session_path.exists():
-            raise RuntimeError(f"Session absente. Lancer : python run.py login {self.session_name}")
-        out = self.config.browser_state_dir / f"probe_{self.session_name}"
-        browser = playwright.chromium.launch(headless=not self.config.debug)
-        try:
-            context = browser.new_context(
-                storage_state=str(self.session_path), viewport={"width": 1920, "height": 1080}
+        data = self._open_latest_edition(page)
+        publication_date = self._publication_date(data["info"])
+        dest = self._path_for(publication_date)
+        if dest.exists():
+            print(
+                f"[{self.source_name}] La dernière édition ({dest.name}) est déjà "
+                "archivée, la nouvelle n'est peut-être pas encore en ligne."
             )
-            page = context.new_page()
-            responses = []
-            context.on("response", lambda response: responses.append(response))
+            return None
 
-            lines: list[str] = []
-
-            def snapshot(label: str) -> None:
-                page.screenshot(path=f"{out}_{label}.png")
-                elements = page.evaluate(
-                    """() => [...document.querySelectorAll('a,button,[role=button],[class*=button],[class*=download],[class*=menu]')]
-                        .filter(e => e.offsetParent !== null)
-                        .map(e => `${e.tagName} | ${(e.innerText || e.title || e.getAttribute('aria-label') || '').trim().slice(0, 50)} | ${String(e.className).slice(0, 60)}`)
-                        .slice(0, 80)"""
+        pdf_pattern = data["credentials"]["PdfPattern"]
+        pages = sorted(data["pages"]["Page"], key=lambda p: p["PageNumber"])
+        writer = PdfWriter()
+        for entry in pages:
+            url = pdf_pattern.replace("%PUBPAGE_ID%", str(entry["PublicationPageID"]))
+            response = page.request.get(url, timeout=120_000)
+            body = response.body() if response.ok else b""
+            if body[:5] != b"%PDF-":
+                raise RuntimeError(
+                    f"{self.source_name} : page {entry['PageNumber']} non téléchargée "
+                    f"(HTTP {response.status})."
                 )
-                lines.extend([f"=== {label} : {_redact(page.url)}", *elements, ""])
+            writer.append(PdfReader(BytesIO(body)))
 
-            page.goto(self._READER_URL, wait_until="domcontentloaded", timeout=60_000)
-            page.wait_for_timeout(5_000)
-            try:  # bandeau cookies : refuser
-                page.get_by_text("Continuer sans accepter").first.click(timeout=3_000)
-            except Exception:
-                pass
-            page.wait_for_timeout(2_000)
-            snapshot("1_accueil")
-
-            page.locator(".main-button", has_text="Lire").first.click(timeout=10_000)
-            page.wait_for_timeout(20_000)
-            snapshot("2_lecteur")
-
-            lines.append("=== Réponses réseau (hors images, polices, styles)")
-            for r in responses:
-                if r.request.resource_type in ("image", "font", "stylesheet", "media"):
-                    continue
-                lines.append(
-                    f"{r.status} {r.request.resource_type:9} "
-                    f"{r.headers.get('content-type', '')[:30]:30} "
-                    f"{r.headers.get('content-length', '?'):>10} {_redact(r.url)[:220]}"
-                )
-            Path(f"{out}.txt").write_text("\n".join(lines), encoding="utf-8")
-        finally:
-            browser.close()
-        print(f"[{self.source_name}] Diagnostic enregistré : {out}.txt (+ captures .png)")
+        if len(writer.pages) < len(pages):
+            raise RuntimeError(
+                f"{self.source_name} : {len(writer.pages)} pages assemblées sur {len(pages)}."
+            )
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        partial = dest.with_name(dest.name + ".part")
+        with partial.open("wb") as f:
+            writer.write(f)
+        partial.replace(dest)
+        return dest
