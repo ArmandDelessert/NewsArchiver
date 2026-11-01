@@ -25,7 +25,7 @@ Le script automatise la récupération et l'archivage des titres suivants :
 | Le Courrier | ✅ Implémenté |
 | 24 heures | 🧪 Implémenté, à valider avec une vraie session (voir « Connexion à 24 heures ») |
 | Le Temps | ✅ Implémenté (testé, téléchargement direct) |
-| Le Monde | ⏳ À faire (interception réseau) |
+| Le Monde | 🚧 Connexion et diagnostic (`probe`) prêts, téléchargement à écrire |
 
 ## Structure du projet
 
@@ -41,7 +41,8 @@ NewsArchiver/
     └── sources/
         ├── le_courrier.py       # Téléchargeur de Le Courrier
         ├── vingt_quatre_heures.py  # Téléchargeur de 24 heures
-        └── le_temps.py          # Téléchargeur de Le Temps
+        ├── le_temps.py          # Téléchargeur de Le Temps
+        └── le_monde.py          # Le Monde (en développement : login + probe)
 ```
 
 ## Installation
@@ -85,6 +86,17 @@ Un navigateur visible s'ouvre. Après connexion, appuyer sur Entrée dans le ter
 ## Le Temps
 
 Connecté, la liste `letemps.ch/pdf?publication=TPS` propose un lien **PDF** direct pour chaque édition, y compris celle du lendemain, publiée la veille au soir. Le script lit la date de parution sur la carte de la dernière édition et télécharge ce PDF avec la session enregistrée (`python run.py login letemps`, connexion manuelle). Sans session valide, la liste n'affiche que des liens ePaper : le script signale alors « session expirée ».
+
+## Le Monde (en cours)
+
+Le lecteur `journal.lemonde.fr` est une application Twipe. « Lire » redirige vers la connexion `secure.lemonde.fr`. La source n'est pas encore active (exclue de `python run.py`). Étapes :
+
+```bash
+python run.py login lemonde   # connexion manuelle, une fois
+python run.py probe lemonde   # ouvre le lecteur et enregistre boutons et trafic réseau
+```
+
+Le diagnostic est écrit dans `.browser_state/probe_lemonde.txt` (valeurs des paramètres d'URL masquées) avec deux captures d'écran. Il sert à décider entre un bouton de téléchargement et une interception réseau.
 
 ## Archivage
 

@@ -10,6 +10,9 @@ class BaseDownloader(ABC):
     # Nom du fichier de session (cookies) ; None si la source est en accès libre.
     session_name: str | None = None
 
+    # False : source en cours de développement, exclue de « python run.py » sans argument.
+    ready: bool = True
+
     def __init__(self, config) -> None:
         self.config = config
 
