@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from datetime import date
 from pathlib import Path
-from playwright.sync_api import Page, Playwright
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright
 
 _VIEWPORT = {"width": 1920, "height": 1080}
 
@@ -37,11 +38,21 @@ class BaseDownloader(ABC):
     def login(self, playwright: Playwright) -> None:
         raise NotImplementedError(f"{self.source_name} n'a pas de connexion.")
 
-    def run(self, playwright: Playwright) -> None:
-        if self.already_archived():
-            print(f"[{self.source_name}] Déjà téléchargé — ignoré.")
-            return
+    def backfill(self, playwright: Playwright, since: date | None, until: date | None) -> int:
+        """Télécharge les anciens numéros ; retourne le nombre d'échecs."""
+        raise NotImplementedError(f"{self.source_name} : pas de rattrapage.")
 
+    @staticmethod
+    def write_pdf(dest: Path, content: bytes) -> None:
+        """Écrit le PDF via un fichier .part ; refuse un contenu qui n'est pas un PDF."""
+        if content[:5] != b"%PDF-":
+            raise RuntimeError("le fichier reçu n'est pas un PDF.")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        partial = dest.with_name(dest.name + ".part")
+        partial.write_bytes(content)
+        partial.replace(dest)
+
+    def open_context(self, playwright: Playwright) -> tuple[Browser, BrowserContext]:
         context_args: dict = {"accept_downloads": True, "viewport": _VIEWPORT}
         if self.session_path is not None:
             if not self.session_path.exists():
@@ -52,8 +63,15 @@ class BaseDownloader(ABC):
             context_args["storage_state"] = str(self.session_path)
 
         browser = playwright.chromium.launch(headless=not self.config.debug)
+        return browser, browser.new_context(**context_args)
+
+    def run(self, playwright: Playwright) -> None:
+        if self.already_archived():
+            print(f"[{self.source_name}] Déjà téléchargé — ignoré.")
+            return
+
+        browser, context = self.open_context(playwright)
         try:
-            context = browser.new_context(**context_args)
             saved = self.download(context.new_page())
         finally:
             browser.close()

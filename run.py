@@ -4,8 +4,11 @@ Usage:
     python run.py                  # exécute toutes les sources actives
     python run.py le_courrier      # exécute une seule source
     python run.py login 24heures   # connexion manuelle (une fois), enregistre la session
+    python run.py backfill letemps --depuis 2009-02-01 [--jusqu AAAA-MM-JJ]   # anciens numéros
 """
+import argparse
 import sys
+from datetime import date
 from playwright.sync_api import sync_playwright
 
 from newsarchiver.config import load_config
@@ -35,6 +38,19 @@ def main() -> None:
         with sync_playwright() as p:
             cls(config).login(p)
         return
+
+    if args[:1] == ["backfill"]:
+        parser = argparse.ArgumentParser(prog="run.py backfill", description="Télécharge les anciens numéros.")
+        parser.add_argument("source", choices=list(SOURCES))
+        parser.add_argument("--depuis", type=date.fromisoformat, metavar="AAAA-MM-JJ")
+        parser.add_argument("--jusqu", type=date.fromisoformat, metavar="AAAA-MM-JJ")
+        options = parser.parse_args(args[1:])
+        try:
+            with sync_playwright() as p:
+                failures = SOURCES[options.source](config).backfill(p, options.depuis, options.jusqu)
+        except (RuntimeError, NotImplementedError) as e:
+            sys.exit(f"ERREUR : {e}")
+        sys.exit(1 if failures else 0)
 
     requested = args[0] if args else "all"
     if requested == "all":

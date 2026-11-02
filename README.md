@@ -68,7 +68,9 @@ Les paramètres sont lus dans le fichier `.env` (exclu de Git) :
 ```bash
 python run.py              # toutes les sources
 python run.py le_courrier  # une seule source
-python run.py login 24heures  # connexion manuelle, une seule fois (idem : login letemps)
+python run.py login 24heures  # connexion manuelle, une seule fois
+python run.py backfill letemps --depuis 2009-02-01 --jusqu 2009-02-28   # anciens numéros
+python run.py backfill lemonde                                          # tout ce qui est disponible
 ```
 
 Pour un lancement automatique, créer une tâche planifiée du système (par exemple chaque jeudi pour Le Courrier).
@@ -90,6 +92,13 @@ Connecté, la liste `letemps.ch/pdf?publication=TPS` propose un lien **PDF** dir
 ## Le Monde
 
 Le lecteur `journal.lemonde.fr` (Twipe) n'a pas de bouton « tout télécharger » : « Imprimer » ne propose que la page courante. Connecté (`python run.py login lemonde`, connexion manuelle), le lecteur reçoit l'index des pages et un modèle d'URL signées pour le PDF de chaque page. Le script récupère ces données (interception des réponses réseau du lecteur), télécharge les PDF de toutes les pages (Le Monde, mais aussi suppléments et cahiers de l'édition, par exemple Époque) et les assemble en un seul fichier avec `pypdf`. La date vient du nom de l'édition (« Le Monde - 02-11-2026 »). L'édition du lendemain est disponible dès la veille au soir.
+
+## Anciens numéros (`backfill`)
+
+`python run.py backfill <source> [--depuis AAAA-MM-JJ] [--jusqu AAAA-MM-JJ]` télécharge les anciens numéros, avec les mêmes noms et dossiers que le téléchargement quotidien. Les fichiers déjà présents sont ignorés (la commande peut être interrompue et relancée) et une pause de 2 secondes sépare deux téléchargements.
+
+- **Le Temps** (`--depuis` obligatoire) : l'archive PDF remonte au **2 février 2009**. La liste est interrogée par fenêtres d'un mois, car elle est plafonnée à 5 pages. Seule la publication « Le Temps » est téléchargée, pas les hors-séries ni T Magazine. Le journal du 6 février 2009 n'existe pas dans l'archive (seul son supplément y figure).
+- **Le Monde** : deux sources, sans option nécessaire. Les 30 derniers jours viennent du kiosque (PDF de pages assemblés, avec suppléments), de 1 à 3 mois du service d'archives `macommande.lemonde.fr/archives` (PDF complets, plus légers). Au-delà de 3 mois, rien n'est disponible : il faut donc lancer régulièrement la commande, avant que les numéros ne disparaissent.
 
 ## Archivage
 

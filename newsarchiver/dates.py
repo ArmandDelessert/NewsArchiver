@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterator
 from datetime import date, timedelta
 
 MOIS = {
@@ -22,3 +23,12 @@ def last_issue_date_without_sunday() -> date:
     """Date de la dernière édition attendue d'un quotidien sans parution le dimanche."""
     today = date.today()
     return today - timedelta(days=1) if today.weekday() == _DIMANCHE else today
+
+
+def month_windows(since: date, until: date) -> Iterator[tuple[date, date]]:
+    """Découpe [since, until] en fenêtres d'un mois (du plus récent au plus ancien)."""
+    cursor = until
+    while cursor >= since:
+        first = max(cursor.replace(day=1), since)
+        yield first, cursor
+        cursor = cursor.replace(day=1) - timedelta(days=1)
