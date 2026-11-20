@@ -75,6 +75,14 @@ python run.py backfill lemonde                                          # tout c
 
 Pour un lancement automatique, créer une tâche planifiée du système (par exemple chaque jeudi pour Le Courrier).
 
+## Supervision (facultatif)
+
+Désactivée par défaut, et elle envoie des données à un service tiers. Créez un check [Healthchecks.io](https://healthchecks.io/) par
+tâche planifiée (période = celle de la tâche, délai de grâce de quelques heures) et mettez son URL de ping dans `.env` :
+`HEARTBEAT_URL`, ou `HEARTBEAT_URL_LE_COURRIER` (etc.) pour une tâche qui ne lance qu'une source. Chaque `python run.py [source]` envoie `start`
+puis `ok`, ou `fail` avec l'erreur de chaque source en échec. Une source « déjà téléchargée » compte comme un succès. Si la tâche ne se lance plus
+(PC éteint, tâche supprimée), l'absence de ping déclenche l'alerte.
+
 ## Connexion à 24 heures
 
 La connexion passe par le SSO Tamedia (e-mail et mot de passe) protégé par Cloudflare Turnstile : elle n'est **pas automatisée**, et aucun mot de passe n'est stocké. On se connecte une fois à la main :
